@@ -27,10 +27,10 @@
 - The bot gets Hadiths directly from Sunan Ibn Majah (may Allah have mercy on him). Just a heads-up, some Hadiths in the
 book are weak, so keep that in mind.  
 
-- I have used the Open Hadith Dataset shared by brother mhashim6@ from GitHub (https://github.com/mhashim6/Open-Hadith-Data). You can pick any other book if you want, but I chose Sunan Ibn Majah because it’s shorter.  
+- I have used the Open Hadith Dataset shared by Akh mhashim6@ from GitHub (https://github.com/mhashim6/Open-Hadith-Data). You can pick any other book if you want, but I chose Sunan Ibn Majah because it’s shorter.  
 
 - Use a fake Instagram account with a profile picture and name to avoid getting banned.  
 
 - It saves the session after the first login, so you don’t have to log in every time you run it.  
 
-Jazana Allah wa iyyakum khayran :)
+And Jazana Allah wa iyyakum khayran :)
