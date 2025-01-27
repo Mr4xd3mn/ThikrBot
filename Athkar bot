@@ -2,16 +2,15 @@ import time
 import random
 import os
 import logging
-import gdown
-import openai
+import requests
+import json
 from getpass import getpass
 from instagrapi import Client
 from instagrapi.exceptions import LoginRequired, TwoFactorRequired
 
-# إعداد تسجيل الأخطاء
 logging.basicConfig(filename='bot.log', level=logging.ERROR)
 
-# قائمة بالأذكار
+
 athkar = [
     "سبحان الله وبحمده",
     "لا إله إلا الله وحده لا شريك له، له الملك وله الحمد وهو على كل شيء قدير",
@@ -30,260 +29,206 @@ athkar = [
     "اللهم إني أعوذ بك من الكسل والهرم والمأثم والمغرم",
 ]
 
-# تهيئة العميل
 client = Client()
-
-# قائمة لتخزين الفوائد التي تم إرسالها مسبقًا
 sent_benefits = []
-
-# ملف إعدادات API
+sent_groups = set()
 SETTINGS_FILE = "settings.json"
 
-# دالة لتحميل الإعدادات
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE, "r", encoding="utf-8") as file:
-                import json
                 return json.load(file)
         except Exception as e:
-            logging.error(f"فشل تحميل الإعدادات: {e}")
+            logging.error(f"Failed to load settings: {e}")
             return {}
     return {}
 
-# دالة لحفظ الإعدادات
 def save_settings(settings):
     try:
         with open(SETTINGS_FILE, "w", encoding="utf-8") as file:
-            import json
             json.dump(settings, file)
     except Exception as e:
-        logging.error(f"فشل حفظ الإعدادات: {e}")
+        logging.error(f"Failed to save settings: {e}")
 
-# دالة لتسجيل الدخول
 def login():
-    print("=== تسجيل الدخول إلى إنستقرام ===")
-    
-    # تحقق من وجود ملف الجلسة
+    print("=== Logging into Instagram ===")
     if os.path.exists('session.json'):
         try:
-            client.load_settings('session.json')  # تحميل الجلسة إذا كانت موجودة
-            print("تم تحميل الجلسة من ملف session.json بنجاح!")
+            client.load_settings('session.json')
+            print("Session loaded successfully from session.json!")
             return True
         except Exception as e:
-            logging.error(f"فشل تحميل الجلسة من ملف session.json: {e}")
-            print(f"فشل تحميل الجلسة من ملف session.json: {e}")
-            # إذا فشل تحميل الجلسة، ننتقل إلى تسجيل الدخول اليدوي
+            logging.error(f"Failed to load session from session.json: {e}")
+            print(f"Failed to load session from session.json: {e}")
             return manual_login()
     else:
-        print("لم يتم العثور على ملف الجلسة، سيتم تسجيل الدخول يدويًا.")
+        print("Session file not found, proceeding with manual login.")
         return manual_login()
 
-# دالة لتسجيل الدخول يدويًا
 def manual_login():
-    username = input("اسم المستخدم: ")
-    password = getpass("كلمة المرور: ")
-
+    username = input("Username: ")
+    password = getpass("Password: ")
     if not username or not password:
-        print("خطأ: يرجى إدخال اسم المستخدم وكلمة المرور")
+        print("Error: Please enter both username and password.")
         return False
-
     try:
-        # محاولة تسجيل الدخول
         client.login(username, password)
-        client.dump_settings('session.json')  # حفظ الجلسة
-        print("تم تسجيل الدخول بنجاح!")
+        client.dump_settings('session.json')
+        print("Logged in successfully!")
         return True
     except TwoFactorRequired:
-        # التحقق بخطوتين
-        verification_code = input("أدخل رمز التحقق بخطوتين: ")
+        verification_code = input("Enter two-factor verification code: ")
         try:
             client.two_factor_login(verification_code)
-            client.dump_settings('session.json')  # حفظ الجلسة
-            print("تم تسجيل الدخول بنجاح باستخدام التحقق بخطوتين!")
+            client.dump_settings('session.json')
+            print("Logged in successfully with two-factor authentication!")
             return True
         except Exception as e:
-            logging.error(f"فشل تسجيل الدخول باستخدام التحقق بخطوتين: {e}")
-            print(f"فشل تسجيل الدخول باستخدام التحقق بخطوتين: {e}")
+            logging.error(f"Failed to log in with two-factor authentication: {e}")
+            print(f"Failed to log in with two-factor authentication: {e}")
             return False
     except Exception as e:
-        logging.error(f"فشل تسجيل الدخول: {e}")
-        print(f"فشل تسجيل الدخول: {e}")
+        logging.error(f"Login failed: {e}")
+        print(f"Login failed: {e}")
         return False
 
-# دالة لاختصار النص
-def shorten_text(text, max_length=200):
-    if len(text) > max_length:
-        return text[:max_length] + "..."  # اختصار النص وإضافة نقاط
-    return text
-
-# دالة لتنزيل الملفات من Google Drive
-def download_files_from_drive():
-    # رابط المجلد على Google Drive
-    folder_url = "https://drive.google.com/drive/folders/1TixclJPd4zIre-4SdvZO1C5OLYDjf6_1"
-    
-    # تنزيل الملفات
-    gdown.download_folder(folder_url, output="benefits", quiet=False)
-
-# دالة لاستخدام الذكاء الاصطناعي لاختيار جزء من النص
-def select_text_with_ai(text):
+def fetch_hadith():
     try:
-        response = openai.Completion.create(
-            engine="text-davinci-003",  # استخدام نموذج GPT-3
-            prompt=f"اختر جزءًا مفيدًا واحدًا فقط من النص التالي:\n{text}\n\nالجزء المختار:",
-            max_tokens=100,  # الحد الأقصى لعدد الكلمات
-            temperature=0.7,  # درجة الإبداع
-        )
-        selected_text = response.choices[0].text.strip()
-        
-        # التأكد من أن النص كامل (لا ينقطع في منتصف الجملة)
-        if not selected_text.endswith(('.', '!', '؟')):
-            # إذا لم ينتهِ بعلامة ترقيم، نبحث عن آخر علامة ترقيم ونقطع النص عندها
-            last_punctuation = max(selected_text.rfind('.'), selected_text.rfind('!'), selected_text.rfind('؟'))
-            if last_punctuation != -1:
-                selected_text = selected_text[:last_punctuation + 1]
-        
-        return selected_text
+        url = "https://raw.githubusercontent.com/mhashim6/Open-Hadith-Data/refs/heads/master/Sunan_Ibn-Maja/sunan_ibn-maja_ahadith.utf8.csv"
+        response = requests.get(url)
+        if response.status_code != 200:
+            return "Failed to fetch hadiths from the website."
+        data = response.text
+        hadiths = []
+        start = 0
+        while True:
+            start_idx = data.find("حدثنا", start)
+            if start_idx == -1:
+                break
+            end_idx = data.find('"', start_idx)
+            if end_idx == -1:
+                break
+            hadith = data[start_idx:end_idx].strip()
+            if hadith:
+                hadiths.append(hadith)
+            start = end_idx + 1
+        print("First 3 hadiths from the data:")
+        for i, hadith in enumerate(hadiths[:3]):
+            print(f"Hadith {i+1}: {hadith}")
+        if hadiths:
+            return random.choice(hadiths)
+        else:
+            return "No hadiths found in the data."
     except Exception as e:
-        logging.error(f"حدث خطأ أثناء استخدام الذكاء الاصطناعي: {e}")
-        return text[:200]  # إذا فشل الذكاء الاصطناعي، نختصر النص يدويًا
+        logging.error(f"Error fetching hadith: {e}")
+        return "Error fetching hadith."
 
-# دالة لجلب فائدة دينية من الملفات المحملة
 def fetch_benefit():
     try:
-        # تنزيل الملفات إذا لم تكن موجودة
-        if not os.path.exists("benefits"):
-            download_files_from_drive()
-
-        # الحصول على قائمة الملفات
-        files = os.listdir("benefits")
-        if not files:
-            return "لم يتم العثور على ملفات للفوائد الدينية."
-
-        # اختيار ملف عشوائي
-        file_name = random.choice(files)
-        file_path = os.path.join("benefits", file_name)
-
-        # قراءة الملف
-        with open(file_path, "r", encoding="utf-8") as file:
-            text = file.read()
-            if text:
-                # استخدام الذكاء الاصطناعي لاختيار جزء من النص
-                benefit = select_text_with_ai(text)
-                if benefit:
-                    # التحقق من عدم تكرار الفائدة
-                    if benefit not in sent_benefits:
-                        sent_benefits.append(benefit)  # إضافة الفائدة إلى القائمة
-                        return f"فائدة دينية:\n{shorten_text(benefit)}"
-                    else:
-                        return "لم يتم العثور على فائدة جديدة."
-                else:
-                    return "لم يتم العثور على فائدة جديدة اليوم. يرجى المحاولة لاحقًا."
+        benefit = fetch_hadith()
+        if benefit and benefit not in sent_benefits:
+            sent_benefits.append(benefit)
+            return benefit
+        else:
+            if sent_benefits:
+                return random.choice(sent_benefits)
             else:
-                return "لم يتم العثور على فائدة جديدة اليوم. يرجى المحاولة لاحقًا."
+                return "No new hadith found."
     except Exception as e:
-        logging.error(f"حدث خطأ أثناء جلب الفائدة: {e}")
-        return "حدث خطأ أثناء جلب الفائدة."
+        logging.error(f"Error fetching benefit: {e}")
+        return "Error fetching benefit."
 
-# دالة لإرسال الأذكار
 def send_athkar(group_threads):
     random_thikr = random.choice(athkar)
     for thread_id in group_threads:
-        try:
-            client.direct_send(random_thikr, thread_ids=[thread_id])
-            print(f"تم إرسال الذكر إلى القروب {thread_id}: {random_thikr}")
-        except Exception as e:
-            logging.error(f"حدث خطأ أثناء إرسال الذكر إلى القروب {thread_id}: {e}")
-            print(f"حدث خطأ أثناء إرسال الذكر إلى القروب {thread_id}: {e}")
+        retries = 3  # Number of retries
+        for attempt in range(retries):
+            try:
+                client.direct_send(random_thikr, thread_ids=[thread_id])
+                print(f"Sent thikr to group {thread_id}: {random_thikr}")
+                time.sleep(random.randint(20, 30))  # Delay between messages
+                break  # Exit loop if successful
+            except Exception as e:
+                logging.error(f"Error sending thikr to group {thread_id}: {e}")
+                print(f"Error sending thikr to group {thread_id}: {e}")
+                if attempt < retries - 1:  # If not the last attempt
+                    time.sleep(60)  # Wait 60 seconds before retrying
+                else:
+                    print(f"Failed to send thikr to group {thread_id} after {retries} attempts.")
 
-# دالة لإرسال الفوائد الدينية
 def send_benefit(group_threads):
     benefit = fetch_benefit()
     for thread_id in group_threads:
-        try:
-            client.direct_send(benefit, thread_ids=[thread_id])
-            print(f"تم إرسال الفائدة إلى القروب {thread_id}: {benefit}")
-        except Exception as e:
-            logging.error(f"حدث خطأ أثناء إرسال الفائدة إلى القروب {thread_id}: {e}")
-            print(f"حدث خطأ أثناء إرسال الفائدة إلى القروب {thread_id}: {e}")
+        retries = 3  # Number of retries
+        for attempt in range(retries):
+            try:
+                client.direct_send(benefit, thread_ids=[thread_id])
+                print(f"Sent benefit to group {thread_id}: {benefit}")
+                time.sleep(random.randint(20, 30))  # Delay between messages
+                break  # Exit loop if successful
+            except Exception as e:
+                logging.error(f"Error sending benefit to group {thread_id}: {e}")
+                print(f"Error sending benefit to group {thread_id}: {e}")
+                if attempt < retries - 1:  # If not the last attempt
+                    time.sleep(60)  # Wait 60 seconds before retrying
+                else:
+                    print(f"Failed to send benefit to group {thread_id} after {retries} attempts.")
 
-# دالة لبدء تشغيل البوت
 def start_bot():
     group_threads = set()
 
-    # دالة للحصول على القروبات النشطة
     def get_active_threads():
         try:
             threads = client.direct_threads()
             active_threads = set(thread.id for thread in threads if thread.is_group)
             return active_threads
+        except LoginRequired:
+            logging.error("Logged out, re-login required.")
+            print("Logged out, re-login required.")
+            if not login():
+                return set()
+            else:
+                return get_active_threads()
         except Exception as e:
-            logging.error(f"حدث خطأ أثناء جلب القروبات: {e}")
-            print(f"حدث خطأ أثناء جلب القروبات: {e}")
+            logging.error(f"Error fetching groups: {e}")
+            print(f"Error fetching groups: {e}")
             return set()
 
-    # إرسال ذكر عشوائي عند بدء التشغيل
     group_threads = get_active_threads()
-    send_athkar(group_threads)  # إرسال ذكر عشوائي
-
-    # إرسال فائدة دينية عند بدء التشغيل
+    send_athkar(group_threads)
     send_benefit(group_threads)
 
-    # دورة العمل الرئيسية
-    last_benefit_time = time.time()  # وقت آخر إرسال للفوائد
-    last_athkar_time = time.time()  # وقت آخر إرسال للأذكار
+    last_athkar_time = time.time()
+    last_benefit_time = time.time()
     while True:
         try:
-            # تحديث قائمة القروبات النشطة
             active_threads = get_active_threads()
-            group_threads.update(active_threads)  # إضافة القروبات الجديدة
-
-            # إرسال الأذكار كل 5 ساعات
+            new_groups = active_threads - group_threads
+            if new_groups:
+                print(f"New groups detected: {new_groups}")
+                send_athkar(new_groups)
+                send_benefit(new_groups)
+                group_threads.update(new_groups)
             current_time = time.time()
-            if current_time - last_athkar_time >= 5 * 60 * 60:  # كل 5 ساعات
+            if current_time - last_athkar_time >= 60 * 60:  # Every hour
                 send_athkar(group_threads)
-                last_athkar_time = current_time  # تحديث وقت آخر إرسال للأذكار
-
-            # إرسال الفوائد الدينية كل 7 ساعات
-            if current_time - last_benefit_time >= 7 * 60 * 60:  # كل 7 ساعات
+                last_athkar_time = current_time
+            if current_time - last_benefit_time >= 2 * 60 * 60:  # Every 2 hours
                 send_benefit(group_threads)
-                last_benefit_time = current_time  # تحديث وقت آخر إرسال للفوائد
-
-            # الانتظار لمدة ساعة قبل التكرار
-            print(f"جارٍ الانتظار لمدة ساعة قبل الإرسال التالي... الوقت الحالي: {time.ctime()}")
-            time.sleep(60 * 60)  # انتظار ساعة واحدة
+                last_benefit_time = current_time
+            print(f"Waiting for an hour before the next send... Current time: {time.ctime()}")
+            time.sleep(60 * 60)  # Wait for one hour
         except LoginRequired:
-            logging.error("تم تسجيل الخروج، يلزم تسجيل الدخول مرة أخرى.")
-            print("تم تسجيل الخروج، يلزم تسجيل الدخول مرة أخرى.")
+            logging.error("Logged out, re-login required.")
+            print("Logged out, re-login required.")
             if not login():
-                break  # إيقاف البوت إذا فشل تسجيل الدخول
+                break
         except Exception as e:
-            logging.error(f"حدث خطأ غير متوقع: {e}")
-            print(f"حدث خطأ غير متوقع: {e}")
+            logging.error(f"Unexpected error: {e}")
+            print(f"Unexpected error: {e}")
 
-# دالة لطلب مفتاح OpenAI API من المستخدم
-def get_openai_api_key():
-    settings = load_settings()
-    if "openai_api_key" in settings:
-        return settings["openai_api_key"]
-    
-    api_key = input("أدخل مفتاح OpenAI API: ")
-    if api_key:
-        settings["openai_api_key"] = api_key
-        save_settings(settings)
-        return api_key
-    else:
-        print("لم يتم إدخال مفتاح API. سيتم تعطيل الذكاء الاصطناعي.")
-        return None
-
-# تشغيل البرنامج
 if __name__ == "__main__":
-    # طلب مفتاح OpenAI API
-    api_key = get_openai_api_key()
-    if api_key:
-        openai.api_key = api_key
-    else:
-        print("سيتم تعطيل الذكاء الاصطناعي بسبب عدم وجود مفتاح API.")
-    
+    settings = load_settings()
     if login():
         start_bot()
