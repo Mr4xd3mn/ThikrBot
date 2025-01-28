@@ -9,7 +9,7 @@
 
 - البوت يأخذ من كتاب ابن ماجه رحمه الله مباشرة، طبعاً فيه عدة احاديث ضعيفة.
 
-- استعنت بالمكتبة التي نشرها الأخ mhashim6@  من هنا https://github.com/mhashim6/Open-Hadith-Data 
+- استعنت بالمكتبة التي نشرها الأخ mhashim6@  من (https://github.com/mhashim6/Open-Hadith-Data) [هنا] 
 تقدر تختار أي كتاب ثاني أنا اخترت سنن ابن ماجه لانه قصير.
 
 - استخدم حساب وهمي وحطله صورة واسم لكي لا يحظر.
@@ -27,7 +27,7 @@
 - The bot gets Hadiths directly from Sunan Ibn Majah (may Allah have mercy on him). Just a heads-up, some Hadiths in the
 book are weak, so keep that in mind.  
 
-- I have used the Open Hadith Dataset shared by Akh mhashim6@ from GitHub (https://github.com/mhashim6/Open-Hadith-Data). You can pick any other book if you want, but I chose Sunan Ibn Majah because it’s shorter.  
+- I have used the Open Hadith Dataset shared by Akh mhashim6@ from [here] (https://github.com/mhashim6/Open-Hadith-Data). You can pick any other book if you want, but I chose Sunan Ibn Majah because it’s shorter.  
 
 - Use a fake Instagram account with a profile picture and name to avoid getting banned.  
 
